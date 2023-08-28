@@ -24,6 +24,25 @@ nus_attributes = ('cycle.with_rider', 'cycle.without_rider',
                   'pedestrian.sitting_lying_down', 'vehicle.moving',
                   'vehicle.parked', 'vehicle.stopped', 'None')
 
+t4_categories = ("car", "truck", "trailer", "bus", "bicycle", "motorcycle", "pedestrian", "unknown")
+
+T4NameMapping = {
+    'movable_object.barrier': 'unknown',
+    'vehicle.bicycle': 'bicycle',
+    'vehicle.bus.bendy': 'bus',
+    'vehicle.bus.rigid': 'bus',
+    'vehicle.car': 'car',
+    'vehicle.construction': 'car',
+    'vehicle.motorcycle': 'motorcycle',
+    'human.pedestrian.adult': 'pedestrian',
+    'human.pedestrian.child': 'pedestrian',
+    'human.pedestrian.construction_worker': 'pedestrian',
+    'human.pedestrian.police_officer': 'pedestrian',
+    'movable_object.trafficcone': 'unknown',
+    'vehicle.trailer': 'trailer',
+    'vehicle.truck': 'truck'
+}
+
 
 def create_nuscenes_infos(root_path,
                           info_prefix,
@@ -341,7 +360,7 @@ def obtain_sensor2top(nusc,
     return sweep
 
 
-def export_2d_annotation(root_path, info_path, version, mono3d=True):
+def export_2d_annotation(root_path, info_path, version, mono3d=True, use_t4label=False):
     """Export 2d annotation from the info file and raw data.
 
     Args:
@@ -363,10 +382,13 @@ def export_2d_annotation(root_path, info_path, version, mono3d=True):
     nusc_infos = mmengine.load(info_path)['infos']
     nusc = NuScenes(version=version, dataroot=root_path, verbose=True)
     # info_2d_list = []
-    cat2Ids = [
-        dict(id=nus_categories.index(cat_name), name=cat_name)
-        for cat_name in nus_categories
-    ]
+    if use_t4label:
+        cat2Ids = [dict(id=t4_categories.index(cat_name), name=cat_name) for cat_name in t4_categories]
+    else:
+        cat2Ids = [
+            dict(id=nus_categories.index(cat_name), name=cat_name)
+            for cat_name in nus_categories
+        ]
     coco_ann_id = 0
     coco_2d_dict = dict(annotations=[], images=[], categories=cat2Ids)
     for info in mmengine.track_iter_progress(nusc_infos):
@@ -376,7 +398,8 @@ def export_2d_annotation(root_path, info_path, version, mono3d=True):
                 nusc,
                 cam_info['sample_data_token'],
                 visibilities=['', '1', '2', '3', '4'],
-                mono3d=mono3d)
+                mono3d=mono3d,
+                use_t4label=use_t4label)
             (height, width, _) = mmcv.imread(cam_info['data_path']).shape
             coco_2d_dict['images'].append(
                 dict(
@@ -403,13 +426,16 @@ def export_2d_annotation(root_path, info_path, version, mono3d=True):
         json_prefix = f'{info_path[:-4]}_mono3d'
     else:
         json_prefix = f'{info_path[:-4]}'
+
+    if use_t4label:
+        json_prefix += "_t4label"
     mmengine.dump(coco_2d_dict, f'{json_prefix}.coco.json')
 
 
 def get_2d_boxes(nusc,
                  sample_data_token: str,
                  visibilities: List[str],
-                 mono3d=True):
+                 mono3d=True, use_t4label=False):
     """Get the 2D annotation records for a given `sample_data_token`.
 
     Args:
@@ -490,7 +516,8 @@ def get_2d_boxes(nusc,
 
         # Generate dictionary record to be included in the .json file.
         repro_rec = generate_record(ann_rec, min_x, min_y, max_x, max_y,
-                                    sample_data_token, sd_rec['filename'])
+                                    sample_data_token, sd_rec['filename'],
+                                    use_t4label)
 
         # If mono3d=True, add 3D annotations in camera coordinates
         if mono3d and (repro_rec is not None):
@@ -572,7 +599,8 @@ def post_process_coords(
 
 
 def generate_record(ann_rec: dict, x1: float, y1: float, x2: float, y2: float,
-                    sample_data_token: str, filename: str) -> OrderedDict:
+                    sample_data_token: str, filename: str,
+                    use_t4label: bool) -> OrderedDict:
     """Generate one 2D annotation record given various information on top of
     the 2D bounding box coordinates.
 
@@ -624,11 +652,19 @@ def generate_record(ann_rec: dict, x1: float, y1: float, x2: float, y2: float,
     coco_rec['image_id'] = sample_data_token
     coco_rec['area'] = (y2 - y1) * (x2 - x1)
 
-    if repro_rec['category_name'] not in NuScenesNameMapping:
+    if use_t4label:
+        name_mapping = T4NameMapping
+    else:
+        name_mapping = NuScenesNameMapping
+
+    if repro_rec['category_name'] not in name_mapping:
         return None
-    cat_name = NuScenesNameMapping[repro_rec['category_name']]
+    cat_name = name_mapping[repro_rec['category_name']]
     coco_rec['category_name'] = cat_name
-    coco_rec['category_id'] = nus_categories.index(cat_name)
+    if use_t4label:
+        coco_rec['category_id'] = t4_categories.index(cat_name)
+    else:
+        coco_rec['category_id'] = nus_categories.index(cat_name)
     coco_rec['bbox'] = [x1, y1, x2 - x1, y2 - y1]
     coco_rec['iscrowd'] = 0
 
