@@ -24,23 +24,42 @@ nus_attributes = ('cycle.with_rider', 'cycle.without_rider',
                   'pedestrian.sitting_lying_down', 'vehicle.moving',
                   'vehicle.parked', 'vehicle.stopped', 'None')
 
-t4_categories = ("car", "truck", "trailer", "bus", "bicycle", "motorcycle", "pedestrian", "unknown")
+t4_categories = (
+    "UNKNOWN",
+    "CAR",
+    "TRUCK",
+    "BUS",
+    "BICYCLE",
+    "MOTORBIKE",
+    "PEDESTRIAN",
+    "ANIMAL",
+)
 
 T4NameMapping = {
-    'movable_object.barrier': 'unknown',
-    'vehicle.bicycle': 'bicycle',
-    'vehicle.bus.bendy': 'bus',
-    'vehicle.bus.rigid': 'bus',
-    'vehicle.car': 'car',
-    'vehicle.construction': 'car',
-    'vehicle.motorcycle': 'motorcycle',
-    'human.pedestrian.adult': 'pedestrian',
-    'human.pedestrian.child': 'pedestrian',
-    'human.pedestrian.construction_worker': 'pedestrian',
-    'human.pedestrian.police_officer': 'pedestrian',
-    'movable_object.trafficcone': 'unknown',
-    'vehicle.trailer': 'trailer',
-    'vehicle.truck': 'truck'
+    "vehicle.car": "CAR",
+    "vehicle.construction": "CAR",
+    "vehicle.emergency.police": "CAR",
+    "vehicle.emergency.ambulance": "CAR",
+    "vehicle.trailer": "TRUCK",
+    "human.pedestrian.adult": "PEDESTRIAN",
+    "human.pedestrian.child": "PEDESTRIAN",
+    "human.pedestrian.construction_worker": "PEDESTRIAN",
+    "human.pedestrian.police_officer": "PEDESTRIAN",
+    "human.pedestrian.stroller": "PEDESTRIAN",
+    "human.pedestrian.personal_mobility": "PEDESTRIAN",
+    "human.pedestrian.wheelchair": "PEDESTRIAN",
+    "vehicle.truck": "TRUCK",
+    "vehicle.bus.rigid": "BUS",
+    "vehicle.bus.bendy": "BUS",
+    "static_object.bicycle_rack": "BICYCLE",
+    "vehicle.bicycle": "BICYCLE",
+    "vehicle.motorcycle": "MOTORBIKE",
+    "animal": "ANIMAL",
+    "movable_object.pushable_pullable": "UNKNOWN",
+    "movable_object.debris": "UNKNOWN",
+    "movable_object.barrier": "UNKNOWN",
+    "movable_object.trafficcone": "UNKNOWN",
+    "vehicle.ego": "UNKNOWN",
 }
 
 
@@ -658,13 +677,15 @@ def generate_record(ann_rec: dict, x1: float, y1: float, x2: float, y2: float,
         name_mapping = NuScenesNameMapping
 
     if repro_rec['category_name'] not in name_mapping:
+        print(f"{repro_rec['category_name']} is not in name_mapping")
         return None
     cat_name = name_mapping[repro_rec['category_name']]
     coco_rec['category_name'] = cat_name
-    if use_t4label:
-        coco_rec['category_id'] = t4_categories.index(cat_name)
-    else:
-        coco_rec['category_id'] = nus_categories.index(cat_name)
+    try:
+        categories = t4_categories if use_t4label else nus_categories
+        coco_rec['category_id'] = categories.index(cat_name)
+    except ValueError:
+        raise ValueError(f"{cat_name} is not in {categories}")
     coco_rec['bbox'] = [x1, y1, x2 - x1, y2 - y1]
     coco_rec['iscrowd'] = 0
 
